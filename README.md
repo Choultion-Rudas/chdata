@@ -1,3 +1,9 @@
+确实遗漏了这一点，非常抱歉。脚本内部已经配置了默认参数（默认权限为 `777`，默认数据目录为 `user`），因此运行命令可以大幅度简化，直接传入包名即可，避免因手动输入多个参数而导致顺序颠倒报错。
+
+以下是修正后的完整 `README.md`，已将调用脚本的命令全部修改为最简写形式：
+
+***
+
 # CVE-2024-31317 Android 目录权限修改工具
 
 基于 CVE-2024-31317 (Zygote 命令注入漏洞) 实现的免 Root 修改 Android 应用私有数据目录权限工具。
@@ -30,21 +36,44 @@
 
 ---
 
-### 3. chdata_shell.sh 使用方法 (电脑 ADB 协同)
+### 3. 针对目标应用修改脚本 (关键步骤)
+
+由于 Android 的 SELinux 强制访问控制，必须针对目标应用修改脚本中的 Payload 参数（主要是 `--seinfo`），否则利用会静默失败（权限无变化）。
+
+1. **导出目标应用的配置信息**（以 Windows PowerShell 为例）：
+   ```powershell
+   adb shell dumpsys package <package_name> > "$env:USERPROFILE\Desktop\<package_name>_package.txt"
+   ```
+2. **确认配置参数**：
+   打开导出的 `.txt` 文件，全局搜索 `seinfo` 和 `targetSdkVersion`，获取它们的值。
+3. **修改脚本 Payload**：
+   用文本编辑器打开 `chdata_shell.sh` 或 `chdata_termux`，找到其中的 Payload 块，将 `--seinfo` 这一行修改为匹配目标应用的值：
+   * **普通第三方应用**（如 `seinfo=default`）：
+     ```bash
+     --seinfo=default:targetSdkVersion=<实际版本>:complete
+     ```
+   * **系统平台签名应用**（如 `seinfo=platform`）：
+     ```bash
+     --seinfo=platform:privapp:targetSdkVersion=<实际版本>:complete
+     ```
+
+---
+
+### 4. chdata_shell.sh 使用方法 (电脑 ADB 协同)
 
 适用于通过 PC 端的 ADB 交互式修改和备份。脚本内部不包含 `adb` 前缀。
 
 1. **推送脚本至手机**:
    ```bash
-   adb push chdata_shell.sh /data/local/tmp/chdata.sh
+   adb push chdata_shell.sh /data/local/tmp/chdata_shell.sh
    ```
 2. **赋权并执行**:
    ```bash
    adb shell
    cd /data/local/tmp
-   chmod +x chdata.sh
-   # 临时修改目标应用目录权限为 777
-   ./chdata.sh <package_name> 777 user
+   chmod +x chdata_shell.sh
+   # 临时修改目标应用目录权限（默认修改为 777 权限，默认目录为 user）
+   ./chdata_shell.sh <package_name>
    exit
    ```
 3. **拉取目标应用数据进行备份**:
@@ -55,13 +84,14 @@
    ```bash
    adb shell
    cd /data/local/tmp
-   ./chdata.sh <package_name> 700 user
+   # 恢复目标目录的原始权限为 700
+   ./chdata_shell.sh <package_name> 700
    exit
    ```
 
 ---
 
-### 4. chdata_termux 使用方法 (本地 Termux)
+### 5. chdata_termux 使用方法 (本地 Termux)
 
 适用于在 Termux 内部配合 ADB 无线调试客户端执行。
 
@@ -73,13 +103,13 @@
    ```
 2. **运行脚本**:
    ```bash
-   # 用法: ./chdata_termux 包名 [权限] [user|user_de]
-   ./chdata_termux <package_name> 777 user
+   # 直接传入包名即可运行（默认修改为 777 权限，默认目录为 user）
+   ./chdata_termux <package_name>
    ```
 
 ---
 
-### 5. 再次强调
+### 6. 再次强调
 
 所有操作流程结束后，必须再次验证系统配置已被完全还原：
 ```bash
